@@ -1,0 +1,42 @@
+# Dockerfile for Elasticsearch 9 with security, API key, and SSL
+FROM elastic/elasticsearch:9.0.3
+
+# Create directories for certs and config
+USER root
+RUN mkdir -p /usr/share/elasticsearch/config/certs
+
+# Copy SSL certs (generate these locally and mount or COPY them)
+# Example: server.crt and server.key
+COPY certs/server.crt /usr/share/elasticsearch/config/certs/server.crt
+COPY certs/server.key /usr/share/elasticsearch/config/certs/server.key
+
+# Set permissions
+RUN chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/config/certs
+
+USER elasticsearch
+
+# Environment variables for security and API key
+ENV xpack.security.enabled=true \
+    xpack.security.authc.api_key.enabled=true \
+    xpack.security.http.ssl.enabled=true \
+    xpack.security.http.ssl.key=certs/server.key \
+    xpack.security.http.ssl.certificate=certs/server.crt \
+    xpack.security.http.ssl.verification_mode=certificate
+
+# Expose default port
+EXPOSE 9200
+
+# Entrypoint is inherited from base image
+
+# ---
+# Instructions:
+# 1. Generate self-signed certs and place them in ./certs (server.crt, server.key).
+#    PowerShell command to generate self-signed certs (for Windows users):
+#    $certDir = "certs"; if (!(Test-Path $certDir)) { New-Item -ItemType Directory -Path $certDir } ; openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout $certDir/server.key -out $certDir/server.crt -subj "/CN=localhost"
+#
+#    Bash command (for Linux/macOS):
+#    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#      -keyout certs/server.key -out certs/server.crt -subj "/CN=localhost"
+# 2. Build: docker build -t elasticsearch-secure:9.0.3 .
+# 3. Update your docker-compose.yml to use this image and mount certs if needed.
+# 4. On first run, set passwords for built-in users (see Elastic docs).

@@ -1,0 +1,147 @@
+version: '3.8'
+
+networks:
+  hostnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
+
+volumes:
+  pgdata:
+  esdata01:
+  esdata02:
+
+services:
+  postgresql:
+    image: postgres:latest
+    container_name: postgresql
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      hostnet:
+        ipv4_address: 172.29.0.2
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgresql
+    networks:
+      hostnet:
+        ipv4_address: 172.29.0.7
+
+  es01:
+    image: elasticsearch-secure:9
+    container_name: es01
+    environment:
+      - node.name=es01
+      - cluster.name=amazing-cluster
+      - discovery.seed_hosts=es01,es02
+      - cluster.initial_master_nodes=es01,es02
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/server.key
+      - xpack.security.transport.ssl.certificate=certs/server.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/server.crt
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata01:/usr/share/elasticsearch/data
+      - ./certs:/usr/share/elasticsearch/config/certs:ro
+    networks:
+      hostnet:
+        ipv4_address: 172.29.0.3
+    ports:
+      - 9200:9200
+      - 9300:9300
+
+  es02:
+    image: elasticsearch-secure:9
+    container_name: es02
+    environment:
+      - node.name=es02
+      - cluster.name=amazing-cluster
+      - discovery.seed_hosts=es01,es02
+      - cluster.initial_master_nodes=es01,es02
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=true
+      - xpack.security.transport.ssl.enabled=true
+      - xpack.security.transport.ssl.key=certs/server.key
+      - xpack.security.transport.ssl.certificate=certs/server.crt
+      - xpack.security.transport.ssl.certificate_authorities=certs/server.crt
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata02:/usr/share/elasticsearch/data
+      - ./certs:/usr/share/elasticsearch/config/certs:ro
+    networks:
+      hostnet:
+        ipv4_address: 172.29.0.4
+    ports:
+      - 9201:9200
+      - 9301:9300
+
+  redismq:
+    image: redis:latest
+    container_name: redismq
+    ports:
+      - "6379:6379"
+    networks:
+      hostnet:
+        ipv4_address: 172.29.0.5
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    environment:
+      - REDIS_HOSTS=local:redismq
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redismq
+    networks:
+      hostnet:
+        ipv4_address: 172.29.0.6
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.0.3
+    container_name: kibana
+    environment:
+      - SERVER_NAME=kibana
+      - ELASTICSEARCH_HOSTS=https://es01:9200
+      - ELASTICSEARCH_USERNAME=es_kibana
+      - ELASTICSEARCH_PASSWORD=Qwerty123!
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=/usr/share/kibana/config/certs/server.crt
+      - SERVER_SSL_ENABLED=true
+      - SERVER_SSL_CERTIFICATE=/usr/share/kibana/config/certs/server.crt
+      - SERVER_SSL_KEY=/usr/share/kibana/config/certs/server.key
+    ports:
+      - "5601:5601"
+    volumes:
+      - ./certs:/usr/share/kibana/config/certs:ro
+    depends_on:
+      - es01
+    networks:
+      hostnet:
+        ipv4_address: 172.29.0.8
